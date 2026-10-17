@@ -1,0 +1,44 @@
+{
+  "name": "ABB · Plant 3 Gate Verification",
+  "short_name": "ABB Gate",
+  "description": "ABB Pvt. Ltd. Plant 3 main gate ID verification and entry/exit tracking system.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F3F4F6",
+  "theme_color": "#ED1C24",
+  "lang": "en",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%23ED1C24'/%3E%3Cg fill='white'%3E%3Crect x='48' y='48' width='36' height='36' rx='6'/%3E%3Crect x='108' y='48' width='36' height='36' rx='6'/%3E%3Crect x='48' y='108' width='36' height='36' rx='6'/%3E%3Crect x='60' y='60' width='12' height='12' fill='%23ED1C24'/%3E%3Crect x='120' y='60' width='12' height='12' fill='%23ED1C24'/%3E%3Crect x='60' y='120' width='12' height='12' fill='%23ED1C24'/%3E%3Crect x='108' y='108' width='12' height='12'/%3E%3Crect x='132' y='108' width='12' height='12'/%3E%3Crect x='108' y='132' width='12' height='12'/%3E%3Crect x='132' y='132' width='12' height='12'/%3E%3C/g%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%23ED1C24'/%3E%3Cg fill='white'%3E%3Crect x='128' y='128' width='96' height='96' rx='16'/%3E%3Crect x='288' y='128' width='96' height='96' rx='16'/%3E%3Crect x='128' y='288' width='96' height='96' rx='16'/%3E%3Crect x='160' y='160' width='32' height='32' fill='%23ED1C24'/%3E%3Crect x='320' y='160' width='32' height='32' fill='%23ED1C24'/%3E%3Crect x='160' y='320' width='32' height='32' fill='%23ED1C24'/%3E%3Crect x='288' y='288' width='32' height='32'/%3E%3Crect x='352' y='288' width='32' height='32'/%3E%3Crect x='288' y='352' width='32' height='32'/%3E%3Crect x='352' y='352' width='32' height='32'/%3E%3C/g%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Gate Scan",
+      "short_name": "Scan",
+      "description": "Open the QR gate scanner",
+      "url": "/verify",
+      "icons": []
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View access statistics",
+      "url": "/dashboard",
+      "icons": []
+    }
+  ]
+}

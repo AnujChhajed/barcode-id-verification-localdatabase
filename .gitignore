@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+
+# Environment variables — never commit real keys
+.env
+.env.local
+.env.*.local
+
+# Private — project report and credentials
+project\ .supervisor*
+project .supervisor*
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# The user's earlier college system — kept locally as a feature/dashboard reference only.
+barcode-student-verification-system-add-srs-document/
+barcode-student-verification-system-add-srs-document.zip
+
+# The local SQLite database and its WAL sidecars (created by migrations, never committed)
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

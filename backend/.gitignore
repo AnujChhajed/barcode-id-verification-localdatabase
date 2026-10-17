@@ -1,0 +1,11 @@
+node_modules
+
+# Local database files and their WAL sidecars — never committed
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Environment overrides (never commit real values)
+.env
+.env.local
