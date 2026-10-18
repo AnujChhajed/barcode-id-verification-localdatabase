@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/reports")({
-  component: ReportsPage,
+  component: ReportsView,
 });
 
 // Hardcoded hex values — CSS custom properties don't resolve inside SVG fill attributes.
@@ -54,7 +54,7 @@ function dayLabel(dateKey: string) {
 
 // ── Screen ───────────────────────────────────────────────────────────────────
 
-function ReportsPage() {
+export function ReportsView() {
   const { t } = useTranslation();
   const [from, setFrom] = useState(() => addDays(todayKey(), -29));
   const [to, setTo] = useState(todayKey);

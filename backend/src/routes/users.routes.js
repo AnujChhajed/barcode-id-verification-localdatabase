@@ -3,7 +3,12 @@ import { writeAudit } from "../lib/audit.js";
 import { conflict, notFound } from "../lib/errors.js";
 import { newId } from "../lib/ids.js";
 import { nowIso } from "../lib/time.js";
-import { createUserSchema, idParamSchema, updateUserStatusSchema } from "../validation/schemas.js";
+import {
+  createUserSchema,
+  idParamSchema,
+  resetUserPasswordSchema,
+  updateUserStatusSchema,
+} from "../validation/schemas.js";
 
 /** Administrator-only. Security staff must never reach these routes. */
 const ADMINISTRATOR_ONLY = ["administrator"];
@@ -144,6 +149,41 @@ export function registerUserRoutes({ registrar, db }) {
 
       const updated = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(id);
       res.json({ user: toUserView(updated) });
+    },
+  });
+
+  /**
+   * Safe password reset for authorized administrators.
+   * Never returns hashes or plain text passwords. Audited.
+   */
+  registrar.defineRoute({
+    method: "POST",
+    path: "/api/users/:id/password",
+    access: ADMINISTRATOR_ONLY,
+    params: idParamSchema,
+    body: resetUserPasswordSchema,
+    handler: (req, res, next) => {
+      const { id } = req.validatedParams;
+      const { password } = req.body;
+
+      const target = db.prepare("SELECT id, username FROM users WHERE id = ?").get(id);
+      if (!target) return next(notFound("No such user account."));
+
+      db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(
+        hashPassword(password),
+        nowIso(),
+        id,
+      );
+
+      writeAudit(db, {
+        actorUserId: req.user.id,
+        action: "user.reset_password",
+        entityType: "user",
+        entityId: id,
+        newValue: { username: target.username },
+      });
+
+      res.json({ success: true, message: "Password updated successfully." });
     },
   });
 }

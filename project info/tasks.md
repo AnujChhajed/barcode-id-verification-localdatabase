@@ -460,26 +460,62 @@ reference project's code · deploying or modifying production data.
 
 ---
 
-## Immediate next task
+## Update and Changes Checklist (2026-10-18) — In Progress
 
-**Phase G4 — the repository-wide secret sweep.** Phases A–F are complete and verified
-(`2026-10-17`: typecheck 0 errors, eslint 0 errors, build exit 0, **173/173 tests**, `npm start` serves
-the API and the SPA from one process on `:4000`). G1, G2 and G3 are done. The system runs.
+From `project info/update and changes prompt.txt`:
 
-**Remaining in Phase G:**
+### 1. Inspection & Architecture Findings
+- [x] Identify stack: React 19 + TypeScript + Vite SPA (`src/`) & Node Express 5 + SQLite (`backend/`).
+- [x] Verify database: Local SQLite with portable conventions; prepare normalized PostgreSQL schema proposal for database teammate.
+- [x] Verify asset: Official `abb-logo.png` located in root and `public/abb-logo.png`.
+- [x] Root cause analysis for scanning, duplicate events, IN/OUT state, canteen limits, and calculations.
 
-- **G4 — the secret sweep.** Search the whole repository (not just the new public route) for: a database
-  path or password in browser code, `VITE_*` variables, tokens, SMTP credentials, API keys, and any
-  personal data leaking through a screen, a CSV/PDF export, a log line or a QR payload. The public
-  `/check` payload already has a leak test; everything else has not been swept. Then re-check the 35
-  inherited `npm audit` vulnerabilities.
-- **[!] G5 / G6 are blocked on a decision** — do not build without asking.
+### 2. ID Numbering & Database Schema Update
+- [ ] Migration `0004_short_id.sql` adding `short_id` with `ux_people_short_id` unique index on `people`.
+- [ ] Backfill existing records: Jane Doe (`W101`), ANUJ (`I101`), Vipul (`I102`), Vivek (`I103`).
+- [ ] Auto-assign prefix IDs on backend: `W101, W102...` (Worker), `I101, I102...` (Intern), `V101, V102...` (Visitor), `GRP101...` (Group pass).
+- [ ] Update backend data layer (`people.js`, `people.routes.js`, `gate.routes.js`) to support lookup by short ID and UUID.
 
-**Loose ends recorded, not urgent:** `users.routes.js` and `settings.routes.js` build SQL inline instead
-of going through `backend\src\data\`; optional person fields (`email`, `address`) have no migration yet.
+### 3. Professional Portrait ID Card Design (CR80 ~54 × 85.6 mm)
+- [ ] Portrait CR80 vertical layout only (no landscape).
+- [ ] ABB logo at top (using official asset).
+- [ ] Category centered title ONLY: "WORKER" / "INTERN" / "VISITOR" (no "CATEGORY:" label).
+- [ ] Centered person photograph (or crisp avatar placeholder).
+- [ ] Full name clearly readable.
+- [ ] Short ID number: `ID NO. W101`, `ID NO. I101`, `ID NO. V101`.
+- [ ] Compact, reliably scannable 1D barcode (Code 128) encoding short ID.
+- [ ] "VALID UNTIL: DD MMM YYYY" near bottom.
+- [ ] "ABB PLANT 3" footer.
+- [ ] Clean print styling and print preview dialog.
 
-**Still PENDING DECISION — ask before building:** C5 (emergency lockdown), C6 (operator override),
-F2 (expiry reminders, user chose to skip), G5 (offline policy), G6 (deployment topology / backup).
+### 4. Gate Verification & Automatic IN/OUT
+- [ ] Automatic gate IN/OUT: state OUT -> next scan IN; state IN -> next scan OUT.
+- [ ] Support authorized manual IN/OUT override with mandatory written reason logged to `audit_log`.
+- [ ] Debounce / cooldown preventing rapid repeated scans and duplicate Enter events.
+- [ ] Return state details (`previousState`, `gateState`, `direction`, `shortId`).
 
-**Operational reminder:** the gate scanner guns must be set to **QR mode**. A gun left in
-linear/CODE128 mode cannot read the card.
+### 5. Corner Confirmation Toasts
+- [ ] Gate screen: Corner toast for success entry ("ENTRY RECORDED — [ID]"), exit ("EXIT RECORDED — [ID]"), rejected ("ACCESS DENIED — [REASON]"), unable ("UNABLE TO VERIFY — TRY AGAIN").
+- [ ] Canteen screen: Corner toast for success ("CANTEEN ENTRY RECORDED — [ID]"), duplicate ("ALREADY USED TODAY — [ID]"), rejected ("ACCESS DENIED — [REASON]").
+
+### 6. Combined Access Logs & Reports Page
+- [ ] Unify `/logs` to include both Access Logs and Reports via simple tabs ("Access Logs" and "Reports").
+- [ ] Unified filter controls: date range, ID, category, direction, result.
+- [ ] Retain charts, totals, and CSV export.
+
+### 7. Navigation Cleanup
+- [ ] Remove Incidents, Announcements, and Watchlist from navigation in `_authenticated.tsx`.
+- [ ] Remove Audit Trail from ordinary navigation (retain backend audit functionality).
+- [ ] Merge Reports into Logs nav item (`Logs & Reports`).
+- [ ] Retain streamlined Settings page.
+
+### 8. Login & User Management Polish
+- [ ] Show/hide password toggle on login form input while typing.
+- [ ] Display Account ID, username, name, role, active status, created date, last login in Users page.
+- [ ] Safe password reset/change modal for authorized administrators.
+
+### 9. Validation & Testing
+- [ ] `npm test` passing all test suites.
+- [ ] `npm run typecheck` 0 errors.
+- [ ] `npm run build` exit code 0.
+- [ ] Update `WORKLOG.md`, `phases.md`, `memory.md`, and `NEXT-SESSION.md`.

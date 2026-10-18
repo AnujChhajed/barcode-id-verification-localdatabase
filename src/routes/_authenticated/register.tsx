@@ -192,6 +192,8 @@ function defaultValidity(category: PersonCategory) {
 function cardDataFor(person: PersonView, credential: CredentialView): IdCardData {
   return {
     credentialId: credential.id,
+    shortId: person.shortId ?? null,
+    workerRef: person.workerRef ?? null,
     kind: credential.kind,
     fullName: person.fullName,
     category: person.category,

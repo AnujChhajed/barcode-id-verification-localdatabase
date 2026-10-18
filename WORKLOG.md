@@ -938,3 +938,57 @@ G4), `project info\memory.md` (`ensureFirstAdmin`, real login/signup, the 4-rout
 `jsbarcode` removal, stale-values list), `NEXT-SESSION.md` (auth block, phase table, backend route list,
 NAV_ITEMS 13, evidence table, next task → G4).
 
+---
+
+## 2026-10-18 — Session: Repair and ID-Card Prompt Implementation — VERIFIED
+
+### Scope & Context
+- Implemented the requirements from `project info/update and changes prompt.txt` strictly within `Anuj ABB Id verification system\`. Zero edits outside this directory.
+- Created `project info/checklist.md` as the master tracking checklist for all tasks (Done, In-Progress, Pending).
+
+### Work Completed:
+1. **Short IDs & Database Migration `0004_short_id.sql`:**
+   - Added `short_id TEXT` to `people` with unique index `ux_people_short_id`.
+   - Seed data backfilled: Jane Doe (`W101`), ANUJ (`I101`), Vipul (`I102`), Vivek (`I103`).
+   - Prefix generation logic in `backend/src/data/people.js`:
+     * Worker: `W101, W102...`
+     * Intern: `I101, I102...`
+     * Visitor: `V101, V102...`
+     * Group Pass: `GRP101...`
+   - Gate and canteen verification resolve both short ID 1D barcodes and UUIDs.
+2. **Portrait CR80 Vertical ID Cards (~54 × 85.6 mm):**
+   - Re-implemented `src/lib/idcard.ts` to strict portrait layout:
+     * ABB logo centered at the top.
+     * Category title only: "WORKER" / "INTERN" / "VISITOR".
+     * Centered photograph.
+     * Full name with tracking.
+     * `ID NO. W101`.
+     * Scannable 1D Code 128 barcode encoding the short ID.
+     * `VALID UNTIL: DD MMM YYYY`.
+     * `ABB PLANT 3` footer.
+   - Applied to both single download/print and bulk download.
+3. **Automatic Gate IN/OUT & Debounce:**
+   - Direction auto-inferred by backend (`outside` -> `entry`, `inside` -> `exit`).
+   - Manual Override Dialog with mandatory written audit reason logged to `audit_log`.
+   - 1.2s debounce to prevent duplicate triggers from Enter or camera frames.
+   - Corner confirmation toasts on all gate and canteen scans:
+     * `ENTRY RECORDED — [ID]` / `EXIT RECORDED — [ID]`
+     * `CANTEEN ENTRY RECORDED — [ID]` / `ALREADY USED TODAY — [ID]`
+     * `ACCESS DENIED — [REASON]`
+     * `UNABLE TO VERIFY — TRY AGAIN`
+4. **Combined Access Logs & Reports (`/logs`):**
+   - 4-tab interface on `/logs` (Access Logs, Reports & Analytics, Daily Attendance, Denied Frequency).
+   - Preserves `/reports` route rendering `ReportsView`.
+5. **Streamlined Navigation:**
+   - Clean 8-item primary navigation: Dashboard, Gate Scan, Who's Inside, Logs & Reports, Canteen, People & Credentials, Users, Settings.
+   - Incidents, Announcements, Watchlist, Audit Trail removed from primary sidebar (backend routes preserved).
+6. **Login & Users Polish:**
+   - Show/hide password toggle (Eye/EyeOff icons) on login form.
+   - User table displays Account ID, Username, Full Name & Email, Role, Status, Created Date, Last Login Date.
+   - Added backend route `POST /api/users/:id/password` (audited, administrator-only).
+   - `ResetPasswordDialog` modal for administrators on `/users` with show/hide password toggle.
+7. **Verification Evidence:**
+   - `npm test`: 173/173 tests passing.
+   - `npx tsc --noEmit`: 0 type errors.
+   - `npm run build`: Exit code 0, client bundle cleanly built.
+

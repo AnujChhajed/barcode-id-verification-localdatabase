@@ -1,0 +1,293 @@
+ABB PLANT 3 GATE VERIFICATION SYSTEM
+UPDATED REPAIR AND ID-CARD PROMPT FOR ANTIGRAVITY / TRACE
+================================================================
+
+YOUR ROLE
+Act as a senior software engineer, backend engineer, PostgreSQL database reviewer, UI/UX designer, and QA engineer. First read the existing project documentation, understand the code, identify the root causes, and then fix the existing ABB Plant 3 Gate Verification System carefully. Do not rebuild the whole system without evidence and approval.
+
+STRICT PROJECT SCOPE
+1. Make changes ONLY inside:
+   "Anuj ABB Id verification system"
+2. Do NOT edit, delete, rename, move, or modify:
+   "Sagar Barcode id verification Project"
+3. Read ALL relevant Markdown files in the project's "project info" folder before coding, including (if present):
+   PRD.md, Architecture.md, rules.md, phases.md, memory.md, tasks.md, and any other .md files.
+4. Also inspect the original requirements document, actual source code, backend, frontend, package files, database configuration, migrations, environment-variable examples, and current API routes.
+5. Compare documentation with the real implementation. Do not assume either is automatically correct.
+6. Start with inspection and a written findings/plan report. Do not immediately delete pages, tables, or data.
+7. The database teammate owns the final PostgreSQL schema. Propose changes and coordinate with them before changing the schema.
+8. Do not reset, drop, truncate, or overwrite existing tables/data. Any schema migration must include a verified backup/rollback plan, a data mapping plan, and explicit approval.
+9. Work in small steps, test each change, and report actual results. Never claim a feature works if it was not tested.
+
+IMPORTANT ABOUT LOGIN PASSWORDS
+The login system should be simple to use and the user/account table should be easy to understand. Do not store or display plain-text passwords or password hashes. Store a standard password hash server-side; never return it to the frontend.
+- Show account ID, username/login ID, display name if available, role, active/disabled status, created date, and last login where appropriate.
+- Password entry should be simple, with a show/hide toggle only while the user is typing it into the login form—not a way to retrieve saved passwords.
+- Provide a safe password reset/change flow for authorized users.
+- Do not allow public sign-up to create an ADMIN account. Create the initial administrator through a documented secure setup/seed process, and only allow authorized admins to create or assign roles.
+- Never put real production credentials in source code, frontend code, logs, or documentation.
+- If development demo accounts are required, use clearly marked local-only test accounts and never ship their credentials to production.
+
+PHASE 1 — INSPECT AND REPORT
+Before implementation:
+- Identify the frontend/backend framework, database currently in use, ORM/query layer, authentication method, existing tables, and migrations.
+- Inspect whether the project uses PostgreSQL directly, Supabase, or both. Do not remove/replace current database tooling until its usage is understood and a migration plan is approved.
+- Identify root causes of failed scanning, duplicate gate events, incorrect IN/OUT state, canteen duplicate entries, and wrong dashboard/report calculations.
+- List routes/pages/features that are genuinely unused and identify dependencies.
+- Report the current schema and proposed changes to the database teammate.
+- Identify which logo/image assets already exist. Use the official ABB logo asset already supplied in the project if available. Do not invent or approximate an official logo. If no approved logo asset exists, leave a clearly named placeholder and request the correct asset.
+- Then present a prioritized plan with risks and questions. Do not perform destructive actions.
+
+A. PROFESSIONAL PORTRAIT ID CARD DESIGN — REQUIRED LAYOUT
+The ID card MUST be PORTRAIT (vertical), not landscape. Use a clean, print-ready, professional corporate/industrial design with strong contrast, readable typography, proper spacing, and a compact scannable barcode. Prefer a standard CR80 card rotated to portrait orientation (approximately 54 × 85.6 mm) unless the existing printer or project requirements specify another size.
+
+Exact layout rules:
+1. ABB logo at the TOP, centered or aligned neatly.
+2. Below the logo, show the person category as one prominent centered title ONLY:
+   "WORKER" or "INTERN" or "VISITOR".
+   Do NOT add a separate label like "CATEGORY" above it. For example, show "WORKER" centered in the middle of the header area, not "CATEGORY: WORKER".
+3. Person's photo centered below the category title, if available and appropriate.
+4. Full name, clearly readable.
+5. Short unique ID number, such as W101, I101, or V101.
+6. A compact but reliably scannable 1D barcode below the ID number (or in the lower section).
+7. Valid-until date clearly displayed near the bottom, e.g. "VALID UNTIL: 18 OCT 2027".
+8. Optional small "ABB PLANT 3" footer if consistent with approved branding.
+9. Keep all elements aligned on a single vertical card canvas. Do not accidentally use a horizontal card layout at screen or print time.
+10. No extra category label anywhere on the card; the category word itself (WORKER/INTERN/VISITOR) is enough.
+
+Suggested vertical order:
+[ABB LOGO]
+[WORKER / INTERN / VISITOR — centered]
+[PERSON PHOTO]
+[FULL NAME]
+[ID NO. W101 / I101 / V101]
+[1D BARCODE]
+[VALID UNTIL: DD MMM YYYY]
+[ABB PLANT 3 — optional footer]
+
+ID numbering:
+- Worker: W101, W102, W103...
+- Intern: I101, I102, I103...
+- Visitor: V101, V102, V103... (confirm this proposed prefix with the project owner).
+- Group visitor passes should have a distinct group-pass reference, not pretend to be an individually assigned person's ID.
+- Generate IDs on the backend with database-level uniqueness and concurrency protection. Do not generate IDs only in the browser. Never reuse an ID after archival.
+- Keep the human-facing short ID separate from the internal database primary key. An internal UUID/identity key is acceptable; users should see the short readable ID on the card and UI.
+
+Barcode rules:
+- Use a compact 1D barcode format such as Code 128 if compatible with the chosen scanner library and physical scanning devices.
+- Encode only the short unique ID or a non-sensitive opaque credential reference. Never encode passwords, Aadhaar/PAN data, phone numbers, or other personal details.
+- Keep enough barcode width/height and quiet-zone/margins for reliable scanning; do not shrink it merely to make the card look attractive.
+- Render at print-friendly resolution/size. Provide a print preview and test scanning from a printed card and a screen at different distances/angles.
+- Do not claim universal scanning range. Test with available scanners and document practical limitations.
+- If credentials can be revoked/reissued, barcode scans must still be validated by the backend; the barcode alone is not proof of validity.
+
+Card output:
+- Use browser print styling that hides navigation, buttons, and unrelated page content.
+- Keep the front design simple and readable. Put sensitive ID-proof documents on the secure record screen, NOT on the printed ID card.
+- Do not print Aadhaar/PAN images or numbers on the ID card.
+- If a back side is implemented, include only approved non-sensitive instructions/contact details. Do not invent company policy.
+- Add a preview before print/download and test alignment, scaling, and barcode legibility.
+
+B. PEOPLE / RECORD CREATION FORMS
+Make person creation and ID issuing easy, with category-specific fields.
+
+Common fields:
+- Internal database ID (not necessarily displayed to normal users)
+- Short unique display ID
+- Category
+- Full name
+- Photo upload (optional or required according to approved policy)
+- Phone number and/or email according to approved policy
+- Status
+- Created/updated timestamp and acting user
+- Start date and validity end date
+
+Worker fields:
+- Contractor/vendor name or contractor reference (optional as requested)
+- ID-proof front image reference and back image reference, only if collection is approved and necessary
+- Validity selected by the authorized creator. Six months may be a suggested default only; do not hard-code it.
+- Allow renewal, extension, revocation, and a history of changes.
+
+Intern fields:
+- College/institute name (optional)
+- Start date and validity end date selected by the authorized creator; do not hard-code the duration.
+- Optional extra fields only if approved.
+
+Visitor fields:
+- Name and phone number according to policy
+- Photo optional
+- Person/department to meet or visit reason
+- Host/approver and visit time/validity where required by policy
+- Do not force worker or intern fields on visitors.
+
+Group visitor pass:
+- One group pass/reference
+- Group leader/contact name and phone
+- Member count
+- Host/department or visit reason
+- Visit date/time and validity
+- Only collect member-level details if the site's approved process requires them. Clearly distinguish a group pass from individual identity verification.
+
+Privacy:
+- Do not collect Aadhaar/PAN numbers or images unless the organization explicitly approves the need.
+- If ID-proof images are approved, store them in private file/object storage and keep secure references in the database. Do not use public URLs or public buckets.
+- Access to ID-proof images must be authorized and logged where appropriate.
+- A user's normal record view can be clear and convenient without exposing sensitive documents to every role.
+
+C. LOGIN, SIGN-UP, AND USERS PAGE
+- Build a simple, clear login experience for authorized users.
+- If self-sign-up is required, new accounts must receive a safe default role and must not be able to assign themselves ADMIN or SECURITY privileges.
+- If only company-managed accounts are allowed, use admin-created accounts instead of public sign-up. Confirm the intended policy rather than inventing it.
+- Users page should clearly display account ID, username/login ID, name, role, status, created date, and last login if available.
+- Passwords and password hashes must never be displayed in the Users page or returned by API.
+- Add role-based backend authorization for ADMIN, SECURITY, and any approved records-management role.
+- Only authorized administrators may create/disable accounts or assign roles.
+- Make password change/reset straightforward and safe.
+- Do not weaken authentication to make the UI look simpler.
+
+D. GATE SCAN / VERIFY PAGE
+Make the gate screen simple and suitable for security staff using a desktop, laptop, or phone. It should show only:
+1. Scan input/camera control.
+2. Clear verification result.
+3. Person details.
+4. Latest gate events/logs.
+5. Authorized manual IN/OUT controls.
+
+Scanning methods:
+- USB barcode scanner.
+- Bluetooth scanner paired with a laptop or phone.
+- Keyboard-wedge scanner input (many scanners type the scanned value and press Enter).
+- Phone camera or laptop webcam when supported by the browser/device.
+- Use a maintained barcode decoder that supports the chosen 1D barcode format.
+- Ask for camera permission and handle denied permission, missing camera, poor lighting, and unsupported devices gracefully.
+- Do not claim every Bluetooth scanner can connect directly through a browser. Support keyboard-wedge input when available and document tested hardware/browser combinations.
+
+On successful or rejected scan, show:
+- Person's photo if available.
+- Short ID, full name, category, validity, and current gate state.
+- Contractor or institute details if applicable and authorized.
+- Visitor host/reason when applicable.
+- A secure button/link to open the person's record and approved ID-proof images when the operator's role permits it.
+
+Corner confirmation:
+- After every scan attempt, show a small, non-blocking toast/notification in a screen corner.
+- Success example: "ENTRY RECORDED — W101".
+- Exit example: "EXIT RECORDED — W101".
+- Canteen duplicate example: "ALREADY USED TODAY — W101".
+- Rejected example: "ACCESS DENIED — CARD EXPIRED".
+- Service failure example: "UNABLE TO VERIFY — TRY AGAIN".
+- Use accessible contrast and clear status text/icons; do not rely on color alone.
+- The toast should not cover the scan input or essential person details and should dismiss automatically while the result remains visible long enough for security staff to read.
+- Prevent a single physical scan from creating multiple requests due to repeated camera frames, Enter events, or duplicate callbacks.
+
+Verification outcomes:
+- APPROVED only after the backend successfully validates the credential and action.
+- REJECTED for invalid, expired, revoked, not-yet-valid, or policy-disallowed access.
+- UNABLE TO VERIFY if the authoritative backend/database cannot be reached.
+- Never approve offline just because a barcode can be decoded.
+
+E. AUTOMATIC GATE IN/OUT
+- Determine the next accepted gate action from the latest successful gate state for the person/card:
+  * Current state OUT → next accepted scan records IN.
+  * Current state IN → next accepted scan records OUT.
+- A single physical scan must create exactly one gate event.
+- Add duplicate-request/idempotency protection and a sensible configurable debounce/cooldown.
+- Do not suppress legitimate later scans forever.
+- Use database transactions/locking or equivalent concurrency-safe logic so simultaneous scans at multiple gates cannot corrupt state.
+- Keep historical events immutable. Do not rewrite old records to hide errors.
+- Provide a manual IN/OUT override for authorized security staff when the automatic state is wrong. Require a reason and record the operator, timestamp, previous state, new state, and reason in the audit log.
+- Do not let a manual override bypass credential validity unless the approved site policy explicitly permits it.
+- Do not automatically reset everyone to OUT at midnight. Ask about overnight/shift policy if it affects the logic.
+
+F. CANTEEN PAGE — ONE SUCCESSFUL ENTRY PER LOCAL DAY
+- Simplify to scan input/camera control, person details, latest logs, and a corner confirmation toast.
+- Use the same barcode input methods as the gate page where supported.
+- A card/person may have only one successful canteen entry per Plant 3 local calendar day.
+- A second scan that day must show "ALREADY USED TODAY" and must not create a second successful entry.
+- Enforce this in backend logic and PostgreSQL with a concurrency-safe unique constraint/design. Frontend-only checks are insufficient.
+- Store timestamp, person/credential reference, local service date, result, and operator/device where available.
+- Define the timezone and local-day boundary with the project owner; do not silently assume UTC is the canteen's day.
+- Test simultaneous scans at multiple counters.
+
+G. ACCESS LOGS AND REPORTS
+- Combine Access Logs and Reports into one page with simple filters/tabs.
+- Filters should include date/time range, ID, name, category, gate/device, IN/OUT, result, and operator where data exists.
+- Show a clear table and accurate totals.
+- Separate successful entries/exits, rejected attempts, and unable-to-verify attempts.
+- Ensure dashboard/report calculations match database query results.
+- Add CSV export only if the existing project supports it or it can be implemented safely. Enforce role permissions.
+- Preserve historical gate/canteen events.
+
+H. DASHBOARD AND PAGE CLEANUP
+- Dashboard is broadly acceptable; fix incorrect graph/pie chart values, labels, legends, totals, date filtering, and responsive layout.
+- Define each metric clearly and calculate it from real database data. Do not double-count duplicate scans or count rejected attempts as successful entries.
+- Remove Incidents, Announcements, and Watchlist from navigation if they are not part of approved requirements.
+- Remove Audit Trail from ordinary navigation if unused, but preserve essential audit logging for manual overrides, role changes, credential issue/renew/revoke, and other sensitive admin actions.
+- Review Settings. Keep a simplified page for settings genuinely required by the system; otherwise remove it only after checking dependencies and getting approval.
+- Do not delete data just to remove a page from the UI.
+
+I. DATABASE AND BACKEND REVIEW
+Propose a normalized PostgreSQL schema to the database teammate before changing tables. Likely entities to review include:
+- users
+- persons
+- worker_details or contractor association, if needed
+- intern_details, if needed
+- visitor_passes / group_passes, if needed
+- id_cards or credentials
+- gate_events / gate_logs
+- canteen_logs
+- audit_logs
+- contractors, only if contractor records need to be managed/reused centrally
+
+Do not create unnecessary separate tables simply to match this list. Agree on the actual normalized model with the database owner.
+
+Schema requirements:
+- Separate internal primary keys from human-facing IDs such as W101/I101/V101.
+- Use foreign keys, unique constraints, appropriate indexes, validation/check constraints, and correct date/time types.
+- Keep a person's common fields in one place and category-specific fields in related tables where that is appropriate.
+- Ensure ID generation is unique under concurrent creation.
+- Store file references securely rather than large photos/documents directly in ordinary rows unless the approved architecture requires otherwise.
+- Store timestamps consistently and display them in Plant 3 local time.
+- Do not drop old tables until data is backed up, mapped, migrated, validated, dependencies are checked, and the owner approves.
+- Use parameterized SQL or the existing safe ORM/query layer.
+- Fix root causes in APIs, transactions, data validation, permissions, date filters, dashboard counts, and current gate-state calculations.
+- Keep database secrets on the server, never in frontend bundles.
+- Do not log passwords, password hashes, tokens, or sensitive document contents.
+
+J. TESTING — REQUIRED BEFORE CLAIMING COMPLETION
+Test and report actual results for:
+1. W101, I101, and V101 IDs are unique and assigned correctly.
+2. Printed barcode is readable with the available USB/Bluetooth scanner and camera scanner.
+3. One valid scan while OUT creates exactly one IN event.
+4. The next valid scan while IN creates exactly one OUT event.
+5. A single scan cannot produce two events from repeated callbacks or Enter events.
+6. Concurrent gate scans do not corrupt current state.
+7. Expired/revoked/not-yet-valid credentials are rejected.
+8. Backend/database outage produces UNABLE TO VERIFY, never false approval.
+9. Manual IN/OUT works only for authorized roles and requires a reason.
+10. A card can receive one successful canteen entry per local day only.
+11. Repeated/concurrent canteen scans cannot create multiple successful entries.
+12. The toast appears in a screen corner after success, rejection, and verification failure.
+13. Authorized operators can view the person's photo and, if permitted, open ID-proof images securely.
+14. Worker/intern validity can be chosen by the authorized creator.
+15. Visitor/group-pass forms show the correct fields.
+16. Dashboard and report counts match independent database checks.
+17. Users page shows account information but never passwords or password hashes.
+18. No broken links remain after unused navigation is removed.
+19. No secrets or sensitive personal information leak into frontend responses or logs.
+20. Existing records are preserved through approved migrations.
+
+K. REQUIRED DELIVERY REPORT
+After implementation, report:
+1. What was wrong and the root causes found.
+2. Files changed and purpose of each change.
+3. Current and proposed database schemas; clearly mark which changes were approved/applied versus pending.
+4. Backup, migration, and rollback details.
+5. API routes changed/added, their roles, and example request/response shapes.
+6. Tests actually run and pass/fail results. Do not claim unrun tests passed.
+7. Hardware/browser scanning methods actually tested and known limitations.
+8. Remaining questions, manual setup steps, and risks.
+9. Update tasks.md and other project documentation to reflect verified progress, not assumptions.
+
+FINAL INSTRUCTION
+Begin by reading ALL .md files in "project info" and inspecting the existing project. Return the inspection report and prioritized plan first. Then make safe, incremental, tested changes. Do not modify "Sagar Barcode id verification Project". Do not drop tables or delete data without explicit approval. Do not store or display plain-text passwords; keep the login simple while protecting credentials.

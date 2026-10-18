@@ -14,8 +14,12 @@ import {
   listCanteenEvents,
   toCanteenEventView,
 } from "../data/canteen.js";
-import { findCredentialById, toCredentialView } from "../data/credentials.js";
-import { findPersonById, toVerificationView } from "../data/people.js";
+import {
+  findActiveCredentialForPerson,
+  findCredentialById,
+  toCredentialView,
+} from "../data/credentials.js";
+import { findPersonByCode, findPersonById, toVerificationView } from "../data/people.js";
 import { siteToday } from "../data/settings.js";
 import { logger } from "../lib/logger.js";
 import { nowIso } from "../lib/time.js";
@@ -106,8 +110,15 @@ export function registerCanteenRoutes({ registrar, db }) {
 
       try {
         credential = findCredentialById(db, code) ?? null;
-        // A credential whose holder cannot be read is never an approval.
-        person = credential ? (findPersonById(db, credential.person_id) ?? null) : null;
+        if (!credential) {
+          const personByCode = findPersonByCode(db, code);
+          if (personByCode) {
+            credential = findActiveCredentialForPerson(db, personByCode.id) ?? null;
+            person = personByCode;
+          }
+        } else {
+          person = findPersonById(db, credential.person_id) ?? null;
+        }
         reason = evaluateCredential(credential, person?.status, today);
         outcome = gateResultFor(reason);
       } catch (error) {

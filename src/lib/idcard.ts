@@ -1,31 +1,39 @@
 import jsPDF from "jspdf";
+import JsBarcode from "jsbarcode";
 import QRCode from "qrcode";
 
 /**
  * Printable credential rendering for the ABB Plant 3 gate system.
  *
- * The single scannable element is a **QR code** carrying the opaque credential
- * id — the same value `/api/gate/verify` expects. No personal data is ever
- * encoded in the QR; the printed name is only a label a human can read.
+ * PROFESSIONAL PORTRAIT ID CARD DESIGN — REQUIRED LAYOUT:
+ * Standard CR80 card rotated to portrait orientation (approximately 54 × 85.6 mm).
  *
- * The card carries nothing else: ABB logo, holder name, category, the issue
- * date, the date it stops being valid, and the QR. Every additional field is
- * one more thing that can be wrong on a printed card, and none of it changes
- * what the gate decides.
- *
- * QR generation is asynchronous (`qrcode` renders to a data URL via a promise),
- * so the builders below are async. Callers must await them.
+ * Exact vertical order:
+ * 1. [ABB LOGO]
+ * 2. [WORKER / INTERN / VISITOR — prominent centered title ONLY, no "CATEGORY:" label]
+ * 3. [PERSON PHOTO] (centered below category title)
+ * 4. [FULL NAME] (clearly readable)
+ * 5. [ID NO. W101 / I101 / V101]
+ * 6. [1D BARCODE] (compact, reliably scannable Code 128)
+ * 7. [VALID UNTIL: DD MMM YYYY]
+ * 8. [ABB PLANT 3 — footer]
  */
 
 export type CredentialKind = "id_card" | "gate_pass";
 export type PersonCategory = "worker" | "intern" | "visitor";
 
 export interface IdCardData {
-  /** Opaque credential id — the QR payload. */
+  /** Opaque credential id / UUID. */
   credentialId: string;
+  /** Human-facing short ID, e.g. W101, I101, V101. */
+  shortId?: string | null;
+  /** Worker reference if separate. */
+  workerRef?: string | null;
   kind: CredentialKind;
   fullName: string;
   category: PersonCategory;
+  /** Optional base64 or URL for person's photo. */
+  photoUrl?: string | null;
   /** The day the credential was issued, `YYYY-MM-DD` or ISO. */
   issuedAt?: string | null;
   /** The last day the credential is valid, inclusive. */
@@ -33,7 +41,7 @@ export interface IdCardData {
 }
 
 const BRAND = "ABB";
-const PLANT = "PLANT 3";
+const PLANT_FOOTER = "ABB PLANT 3";
 
 const CATEGORY_LABEL: Record<PersonCategory, string> = {
   worker: "WORKER",
@@ -41,125 +49,207 @@ const CATEGORY_LABEL: Record<PersonCategory, string> = {
   visitor: "VISITOR",
 };
 
-// ABB red (#ed1c24) — matches `--sidebar-primary` in src/styles.css.
+// ABB red (#ed1c24)
 const ABB_RED: [number, number, number] = [237, 28, 36];
 const INK: [number, number, number] = [24, 24, 27];
 const MUTED: [number, number, number] = [110, 110, 118];
 
-// ISO/IEC 7810 ID-1, held portrait so the QR has the room it needs.
-const CARD_W = 54;
-const CARD_H = 85.6;
+// ISO/IEC 7810 ID-1 / CR80 card in portrait (54 × 85.6 mm)
+export const CARD_W = 54;
+export const CARD_H = 85.6;
 
-/** `YYYY-MM-DD` (or ISO) → a short, locale-aware date. Invalid input is echoed. */
-function formatDate(value?: string | null): string {
+/** "YYYY-MM-DD" (or ISO) → "18 OCT 2027" uppercase format. */
+function formatDateUpper(value?: string | null): string {
   if (!value) return "—";
   const d = value.length <= 10 ? new Date(`${value}T00:00:00`) : new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  if (Number.isNaN(d.getTime())) return String(value).toUpperCase();
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
 }
 
-/** Hard-truncate so a long name cannot run into the QR code. */
+/** Truncates string to fit cleanly on card. */
 function fit(value: string, max: number): string {
   const trimmed = value.trim();
   return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max - 1)}…`;
 }
 
-/**
- * The ABB mark: a white tile with the three letters in ABB red, sized to sit on
- * a red header. Drawn rather than embedded so a card can never print with a
- * missing image.
- */
-function drawLogo(doc: jsPDF, x: number, y: number, size: number) {
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(x, y, size, size, size * 0.16, size * 0.16, "F");
-  doc.setTextColor(...ABB_RED);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(size * 0.86);
-  doc.text(BRAND, x + size / 2, y + size * 0.72, { align: "center" });
+/** Generates a 1D Code 128 barcode as a PNG data URL. */
+export function barcodeDataUrl(value: string): string {
+  if (typeof document === "undefined") return "";
+  try {
+    const canvas = document.createElement("canvas");
+    JsBarcode(canvas, value, {
+      format: "CODE128",
+      width: 2,
+      height: 44,
+      displayValue: false,
+      margin: 0,
+      background: "#ffffff",
+      lineColor: "#000000",
+    });
+    return canvas.toDataURL("image/png");
+  } catch (err) {
+    console.error("Barcode generation failed for", value, err);
+    return "";
+  }
 }
 
-// ── ID card (ISO ID-1, portrait, printed on A4) ──────────────────────────────
-
-function drawIdCard(doc: jsPDF, card: IdCardData, qr: string, ox: number, oy: number) {
-  // Red header with the logo and the card type
-  doc.setFillColor(...ABB_RED);
-  doc.rect(ox, oy, CARD_W, 16, "F");
-  drawLogo(doc, ox + 4, oy + 3.5, 9.5);
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.5);
-  doc.text(PLANT, ox + 16.5, oy + 7.6);
+/**
+ * Draws the official ABB mark neatly centered or aligned at top.
+ */
+function drawAbbLogo(doc: jsPDF, centerX: number, topY: number) {
+  doc.setTextColor(...ABB_RED);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.text(card.kind === "id_card" ? "IDENTITY CARD" : "GATE PASS", ox + 16.5, oy + 12.4);
+  doc.setFontSize(16);
+  doc.text(BRAND, centerX, topY + 6.5, { align: "center" });
 
-  // Holder — centred, the one line a guard reads
+  // Subtle clean top accent bar in ABB red
+  doc.setFillColor(...ABB_RED);
+  doc.rect(centerX - 12, topY + 8, 24, 0.8, "F");
+}
+
+/** Draws placeholder photo silhouette when photoUrl is absent. */
+function drawPhotoPlaceholder(doc: jsPDF, px: number, py: number, pw: number, ph: number) {
+  doc.setFillColor(242, 243, 245);
+  doc.setDrawColor(218, 220, 224);
+  doc.roundedRect(px, py, pw, ph, 1.5, 1.5, "FD");
+
+  // Head and shoulders silhouette
+  const cx = px + pw / 2;
+  doc.setFillColor(185, 190, 198);
+  doc.circle(cx, py + ph * 0.38, pw * 0.18, "F");
+  doc.roundedRect(cx - pw * 0.32, py + ph * 0.62, pw * 0.64, ph * 0.32, 2, 2, "F");
+}
+
+// ── Draw Single Portrait ID Card (CR80) ─────────────────────────────────────
+
+export function drawIdCard(
+  doc: jsPDF,
+  card: IdCardData,
+  barcodeImg: string,
+  ox: number,
+  oy: number,
+) {
+  // Card canvas background (white with crisp rounded corners)
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(220, 222, 226);
+  doc.roundedRect(ox, oy, CARD_W, CARD_H, 2, 2, "FD");
+
+  // 1. [ABB LOGO] at the top, centered
+  const cx = ox + CARD_W / 2;
+  drawAbbLogo(doc, cx, oy + 2.5);
+
+  // 2. [WORKER / INTERN / VISITOR — centered title ONLY, no "CATEGORY:" label]
+  doc.setTextColor(...ABB_RED);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text(CATEGORY_LABEL[card.category] ?? "PERSON", cx, oy + 15, { align: "center" });
+
+  // 3. [PERSON PHOTO] centered below category title
+  const photoW = 22;
+  const photoH = 26;
+  const photoX = ox + (CARD_W - photoW) / 2;
+  const photoY = oy + 18;
+
+  if (card.photoUrl && card.photoUrl.startsWith("data:image/")) {
+    try {
+      doc.addImage(card.photoUrl, "JPEG", photoX, photoY, photoW, photoH);
+      doc.setDrawColor(218, 220, 224);
+      doc.roundedRect(photoX, photoY, photoW, photoH, 1, 1, "D");
+    } catch {
+      drawPhotoPlaceholder(doc, photoX, photoY, photoW, photoH);
+    }
+  } else {
+    drawPhotoPlaceholder(doc, photoX, photoY, photoW, photoH);
+  }
+
+  // 4. [FULL NAME] clearly readable
   doc.setTextColor(...INK);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text(fit(card.fullName, 17), ox + CARD_W / 2, oy + 25, { align: "center" });
+  doc.setFontSize(9.5);
+  doc.text(fit(card.fullName, 19), cx, oy + 48.5, { align: "center" });
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...ABB_RED);
-  doc.text(CATEGORY_LABEL[card.category], ox + CARD_W / 2, oy + 30.5, { align: "center" });
+  // 5. [ID NO. W101 / I101 / V101]
+  const displayId = card.shortId || card.workerRef || card.credentialId.slice(0, 8).toUpperCase();
+  doc.setTextColor(80, 82, 88);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.text(`ID NO. ${displayId}`, cx, oy + 53, { align: "center" });
 
-  // QR — the only scannable element, given the space it needs
-  const qrSize = 34;
-  const qrX = ox + (CARD_W - qrSize) / 2;
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(228, 228, 231);
-  doc.roundedRect(qrX - 2, oy + 35, qrSize + 4, qrSize + 4, 1.5, 1.5, "FD");
-  doc.addImage(qr, "PNG", qrX, oy + 37, qrSize, qrSize);
+  // 6. [1D BARCODE] compact, reliably scannable Code 128
+  if (barcodeImg) {
+    const barW = 38;
+    const barH = 11;
+    const barX = ox + (CARD_W - barW) / 2;
+    const barY = oy + 55;
+    try {
+      doc.addImage(barcodeImg, "PNG", barX, barY, barW, barH);
+    } catch {
+      // Fallback if image failed to insert
+    }
+  }
 
-  // Validity — what the guard actually has to check
-  doc.setDrawColor(214, 214, 218);
-  doc.line(ox + 5, oy + 76, ox + CARD_W - 5, oy + 76);
+  // Divider line above validity
+  doc.setDrawColor(225, 227, 231);
+  doc.line(ox + 5, oy + 69.5, ox + CARD_W - 5, oy + 69.5);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(5.5);
-  doc.setTextColor(...MUTED);
-  doc.text("Issued", ox + 5, oy + 80);
-  doc.text("Valid till", ox + CARD_W / 2 + 1, oy + 80);
-
+  // 7. [VALID UNTIL: DD MMM YYYY] clearly displayed near the bottom
   doc.setTextColor(...INK);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6.5);
-  doc.text(formatDate(card.issuedAt), ox + 5, oy + 84);
-  doc.text(formatDate(card.validTo), ox + CARD_W / 2 + 1, oy + 84);
+  doc.text(`VALID UNTIL: ${formatDateUpper(card.validTo)}`, cx, oy + 74.5, { align: "center" });
+
+  // 8. [ABB PLANT 3 — optional footer]
+  doc.setTextColor(...MUTED);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(5.5);
+  doc.text(PLANT_FOOTER, cx, oy + 80.5, { align: "center" });
 }
 
 /** Single ID card centred on A4 with a dashed cut guide. */
 export async function generateIdCardPDF(card: IdCardData): Promise<jsPDF> {
-  const qr = await qrDataUrl(card.credentialId);
+  const codeVal = card.shortId || card.workerRef || card.credentialId;
+  const barcode = barcodeDataUrl(codeVal);
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const ox = (210 - CARD_W) / 2;
   const oy = (297 - CARD_H) / 2;
 
-  doc.setDrawColor(160);
+  // Dashed cut guide
+  doc.setDrawColor(180, 182, 186);
   doc.setLineDashPattern([2, 2], 0);
   doc.rect(ox - 3, oy - 3, CARD_W + 6, CARD_H + 6);
   doc.setLineDashPattern([], 0);
 
-  drawIdCard(doc, card, qr, ox, oy);
+  drawIdCard(doc, card, barcode, ox, oy);
   return doc;
 }
 
 export async function downloadIdCard(card: IdCardData) {
   const doc = await generateIdCardPDF(card);
-  doc.save(`id-card-${card.fullName.replace(/\s+/g, "-").toLowerCase() || card.credentialId}.pdf`);
+  const safeName = card.fullName.replace(/\s+/g, "-").toLowerCase() || card.shortId || card.credentialId;
+  doc.save(`id-card-${safeName}.pdf`);
+}
+
+/** Open the ID card PDF in a new tab with the print dialog ready. */
+export async function printIdCard(card: IdCardData) {
+  const doc = await generateIdCardPDF(card);
+  doc.autoPrint();
+  const blob = doc.output("blob");
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
+  if (win) win.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
 }
 
 /**
  * Bulk: 9 cards per A4 page (3 columns × 3 rows) with dashed cut guides.
- *
- * Every QR is rendered up front, because the drawing pass that follows is
- * synchronous and cannot await a single one of them.
  */
 export async function downloadBulkIdCards(cards: IdCardData[]) {
   if (cards.length === 0) return;
-  const qrs = await Promise.all(cards.map((card) => qrDataUrl(card.credentialId)));
+  const barcodes = cards.map((card) =>
+    barcodeDataUrl(card.shortId || card.workerRef || card.credentialId),
+  );
 
   const COLS = 3;
   const ROWS = 3;
@@ -178,12 +268,12 @@ export async function downloadBulkIdCards(cards: IdCardData[]) {
     const x = marginX + col * (CARD_W + gapX);
     const y = marginY + row * (CARD_H + gapY);
 
-    doc.setDrawColor(160);
+    doc.setDrawColor(180, 182, 186);
     doc.setLineDashPattern([1.5, 1.5], 0);
     doc.rect(x - 1, y - 1, CARD_W + 2, CARD_H + 2);
     doc.setLineDashPattern([], 0);
 
-    drawIdCard(doc, card, qrs[i], x, y);
+    drawIdCard(doc, card, barcodes[i], x, y);
   });
 
   doc.save(`id-cards-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -193,6 +283,7 @@ export async function downloadBulkIdCards(cards: IdCardData[]) {
 
 export interface GatePassData {
   credentialId: string;
+  shortId?: string | null;
   fullName: string;
   category: PersonCategory;
   issuedAt?: string | null;
@@ -201,80 +292,90 @@ export interface GatePassData {
 
 function isExpired(validTo?: string | null): boolean {
   if (!validTo) return false;
-  // `valid_to` is inclusive — a pass is usable through the end of that day.
   const end = validTo.length <= 10 ? new Date(`${validTo}T23:59:59`) : new Date(validTo);
   return !Number.isNaN(end.getTime()) && end < new Date();
 }
 
 export async function generateGatePassPDF(pass: GatePassData): Promise<jsPDF> {
-  const qr = await qrDataUrl(pass.credentialId);
+  const codeVal = pass.shortId || pass.credentialId;
+  const barcode = barcodeDataUrl(codeVal);
   const doc = new jsPDF({ unit: "mm", format: [105, 148] }); // A6 portrait
   const W = 105;
   const expired = isExpired(pass.validTo);
 
   // Header — logo and title only
   doc.setFillColor(...ABB_RED);
-  doc.rect(0, 0, W, 30, "F");
-  drawLogo(doc, 8, 7, 16);
+  doc.rect(0, 0, W, 26, "F");
 
   doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text(PLANT, 30, 14);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text("GATE PASS", 30, 24);
+  doc.text(BRAND, 10, 15);
 
-  // Holder
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text(PLANT_FOOTER, 10, 21);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("GATE PASS", W - 10, 17, { align: "right" });
+
+  // Prominent category
+  doc.setTextColor(...ABB_RED);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text(CATEGORY_LABEL[pass.category] ?? "VISITOR", W / 2, 38, { align: "center" });
+
+  // Holder Name
   doc.setTextColor(...INK);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(17);
-  doc.text(fit(pass.fullName, 22), W / 2, 44, { align: "center" });
+  doc.setFontSize(16);
+  doc.text(fit(pass.fullName, 22), W / 2, 48, { align: "center" });
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...ABB_RED);
-  doc.text(CATEGORY_LABEL[pass.category], W / 2, 51, { align: "center" });
+  // ID Number
+  const passId = pass.shortId || pass.credentialId.slice(0, 8).toUpperCase();
+  doc.setFontSize(11);
+  doc.setTextColor(80, 82, 88);
+  doc.text(`PASS ID: ${passId}`, W / 2, 56, { align: "center" });
 
-  // QR — the only scannable element
-  const qrSize = 54;
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(228, 228, 231);
-  doc.roundedRect((W - qrSize) / 2 - 3, 56, qrSize + 6, qrSize + 6, 2, 2, "FD");
-  doc.addImage(qr, "PNG", (W - qrSize) / 2, 59, qrSize, qrSize);
+  // 1D Barcode
+  if (barcode) {
+    const bw = 70;
+    const bh = 22;
+    doc.addImage(barcode, "PNG", (W - bw) / 2, 62, bw, bh);
+  }
 
   // Validity
   doc.setDrawColor(214, 214, 218);
-  doc.line(10, 122, W - 10, 122);
+  doc.line(10, 110, W - 10, 110);
 
   doc.setFontSize(9);
   doc.setTextColor(...MUTED);
   doc.setFont("helvetica", "normal");
-  doc.text("Issued", 14, 130);
-  doc.text("Valid till", 60, 130);
+  doc.text("Issued", 14, 118);
+  doc.text("Valid till", 58, 118);
 
   doc.setTextColor(...(expired ? ([200, 50, 50] as [number, number, number]) : INK));
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(formatDate(pass.issuedAt), 14, 136);
-  doc.text(formatDate(pass.validTo), 60, 136);
+  doc.text(formatDateUpper(pass.issuedAt), 14, 125);
+  doc.text(formatDateUpper(pass.validTo), 58, 125);
   if (expired) {
     doc.setFontSize(9);
-    doc.text("(EXPIRED)", W - 14, 136, { align: "right" });
+    doc.text("(EXPIRED)", W - 14, 125, { align: "right" });
   }
 
   // Footer
   doc.setFillColor(245, 245, 246);
-  doc.rect(0, 141, W, 7, "F");
+  doc.rect(0, 140, W, 8, "F");
   doc.setTextColor(...MUTED);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
-  doc.text("Present this pass at the Plant 3 Main Gate", W / 2, 145.6, { align: "center" });
+  doc.setFontSize(7);
+  doc.text("Present this pass at the Plant 3 Main Gate", W / 2, 145, { align: "center" });
 
   return doc;
 }
 
-/** Open the gate pass PDF in a new tab with the print dialog ready. */
 export async function printGatePass(pass: GatePassData) {
   const doc = await generateGatePassPDF(pass);
   doc.autoPrint();
@@ -286,13 +387,11 @@ export async function printGatePass(pass: GatePassData) {
 
 export async function downloadGatePass(pass: GatePassData) {
   const doc = await generateGatePassPDF(pass);
-  doc.save(
-    `gate-pass-${pass.fullName.replace(/\s+/g, "-").toLowerCase() || pass.credentialId}.pdf`,
-  );
+  const safeName = pass.fullName.replace(/\s+/g, "-").toLowerCase() || pass.shortId || pass.credentialId;
+  doc.save(`gate-pass-${safeName}.pdf`);
 }
 
-// ── QR helper (on-screen previews and the status page) ───────────────────────
-
+/** QR helper kept for on-screen status pages / mobile display. */
 export async function qrDataUrl(value: string): Promise<string> {
   return QRCode.toDataURL(value, {
     width: 420,

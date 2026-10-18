@@ -5,22 +5,28 @@ import {
   evaluateCredential,
   gateResultFor,
 } from "../domain/credential-validity.js";
-import { findCredentialById, toCredentialView } from "../data/credentials.js";
+import {
+  findActiveCredentialForPerson,
+  findCredentialById,
+  toCredentialView,
+} from "../data/credentials.js";
 import {
   countGateEvents,
   findRecentApprovedScan,
+  getLatestGateStateForPerson,
   insertGateEvent,
   listGateEvents,
   listInsidePeople,
   toGateEventView,
 } from "../data/gate-events.js";
-import { findPersonById, toVerificationView } from "../data/people.js";
+import { findPersonByCode, findPersonById, toVerificationView } from "../data/people.js";
 import {
   findActiveWatchlistByBarcode,
   findActiveWatchlistForPerson,
   toWatchlistView,
 } from "../data/watchlist.js";
 import { mainGateId, readIntegerSetting, siteTimezone, siteToday } from "../data/settings.js";
+import { writeAudit } from "../lib/audit.js";
 import { logger } from "../lib/logger.js";
 import { addSeconds, isEntryUnclosed, nowIso } from "../lib/time.js";
 import { listGateEventsQuerySchema, verifyGateSchema } from "../validation/schemas.js";
@@ -97,7 +103,7 @@ export function registerGateRoutes({ registrar, db }) {
     access: GATE_ROLES,
     body: verifyGateSchema,
     handler: (req, res) => {
-      const { code, direction } = req.body;
+      let { code, direction, overrideReason } = req.body;
       const now = new Date();
       const occurredAt = nowIso(now);
 
@@ -107,12 +113,40 @@ export function registerGateRoutes({ registrar, db }) {
       let today = null;
       let reason;
       let outcome;
+      let previousState = "outside";
 
       try {
         gateId = mainGateId(db);
         credential = findCredentialById(db, code) ?? null;
-        // A credential whose holder record cannot be read is never an approval.
-        person = credential ? (findPersonById(db, credential.person_id) ?? null) : null;
+        if (!credential) {
+          // Resolve by shortId (W101, I101, V101), workerRef, or personId
+          person = findPersonByCode(db, code);
+          if (person) {
+            credential = findActiveCredentialForPerson(db, person.id);
+          }
+        } else {
+          // A credential whose holder record cannot be read is never an approval.
+          person = findPersonById(db, credential.person_id) ?? null;
+        }
+
+        if (person?.id) {
+          previousState = getLatestGateStateForPerson(db, person.id);
+        }
+
+        // Automatic direction calculation if not explicitly set or set to 'auto'
+        if (!direction || direction === "auto") {
+          direction = previousState === "inside" ? "exit" : "entry";
+        } else if (overrideReason) {
+          writeAudit(db, {
+            actorUserId: req.user.id,
+            action: "gate.override",
+            entityType: "gate_event",
+            reason: overrideReason,
+            oldValue: { state: previousState },
+            newValue: { state: direction, code },
+          });
+        }
+
         today = siteToday(db, now);
         reason = evaluateCredential(credential, person?.status, today);
         outcome = gateResultFor(reason);
@@ -151,6 +185,8 @@ export function registerGateRoutes({ registrar, db }) {
         outcome = UNABLE_TO_VERIFY;
       }
 
+      const gateState = outcome === APPROVED ? (direction === "entry" ? "inside" : "outside") : previousState;
+
       // A watchlist alert is ADVISORY: it is shown next to the verdict and never
       // changes it. A failure to read the watchlist must not turn a refusal into
       // a pass, so it is looked up separately and a miss is simply "no alert".
@@ -169,6 +205,8 @@ export function registerGateRoutes({ registrar, db }) {
         reasonCode: reason.code,
         reasonText: reason.text,
         direction,
+        previousState,
+        gateState,
         occurredAt,
         duplicate: scan.duplicate,
         recorded: scan.recorded,

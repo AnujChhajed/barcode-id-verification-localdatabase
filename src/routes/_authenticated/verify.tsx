@@ -146,7 +146,10 @@ function VerifyPage() {
 
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [direction, setDirection] = useState<GateDirection>("entry");
+  const [autoDirection, setAutoDirection] = useState(true);
+  const [manualDirection, setManualDirection] = useState<GateDirection>("entry");
+  const [manualOverrideOpen, setManualOverrideOpen] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
   const [scanMode, setScanMode] = useState<ScanMode>("scanner");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [recent, setRecent] = useState<Outcome[]>([]);
@@ -172,6 +175,7 @@ function VerifyPage() {
   const quaggaStarted = useRef(false);
   const inFlight = useRef(false);
   const audioCtx = useRef<AudioContext | null>(null);
+  const lastScanRef = useRef<{ code: string; time: number } | null>(null);
 
   const cameraAvailable =
     typeof navigator !== "undefined" &&
@@ -236,16 +240,32 @@ function VerifyPage() {
 
   // ── The scan ─────────────────────────────────────────────────────────────
   const verify = useCallback(
-    async (raw: string, overrideDirection?: GateDirection) => {
+    async (
+      raw: string,
+      overrideOpts?: { direction?: GateDirection; overrideReason?: string },
+    ) => {
       const scanned = raw.trim();
       if (!scanned || inFlight.current) return;
-      // A walk-in states its own direction (entry) rather than inheriting the
-      // toggle, because the person is being let in by this very action.
-      const scanDirection = overrideDirection ?? direction;
+
+      // 1.2s cooldown debounce on identical scan to prevent multiple enter/frames
+      const now = Date.now();
+      if (
+        lastScanRef.current &&
+        lastScanRef.current.code === scanned &&
+        now - lastScanRef.current.time < 1200
+      ) {
+        return;
+      }
+      lastScanRef.current = { code: scanned, time: now };
+
+      const chosenDirection =
+        overrideOpts?.direction ?? (autoDirection ? "auto" : manualDirection);
+      const chosenReason = overrideOpts?.overrideReason ?? (autoDirection ? undefined : overrideReason);
+
       inFlight.current = true;
       setBusy(true);
       try {
-        const answer = await gateApi.verify(scanned, scanDirection);
+        const answer = await gateApi.verify(scanned, chosenDirection, chosenReason);
         recordOutcome({
           result: answer.result,
           reasonCode: answer.reasonCode,
@@ -260,8 +280,25 @@ function VerifyPage() {
           unreachable: false,
           watchlist: answer.watchlist ?? null,
         });
+
+        const displayId =
+          answer.person?.shortId ||
+          answer.person?.workerRef ||
+          answer.credential?.id ||
+          scanned;
+
         if (answer.result === "approved") {
           void queryClient.invalidateQueries({ queryKey: ["inside-now"] });
+          if (answer.direction === "entry") {
+            toast.success(`ENTRY RECORDED — ${displayId}`);
+          } else {
+            toast.success(`EXIT RECORDED — ${displayId}`);
+          }
+        } else if (answer.result === "rejected") {
+          const reason = (answer.reasonText || answer.reasonCode || "").toUpperCase();
+          toast.error(`ACCESS DENIED — ${reason}`);
+        } else {
+          toast.error("UNABLE TO VERIFY — TRY AGAIN");
         }
       } catch (error) {
         // Fail closed. A verdict we did not obtain is a refusal, and saying so
@@ -276,7 +313,7 @@ function VerifyPage() {
             : error instanceof ApiError
               ? error.message
               : t("common.error"),
-          direction: scanDirection,
+          direction: chosenDirection === "auto" ? "entry" : chosenDirection,
           at: new Date(),
           duplicate: false,
           recorded: false,
@@ -286,6 +323,7 @@ function VerifyPage() {
           unreachable,
           watchlist: null,
         });
+        toast.error("UNABLE TO VERIFY — TRY AGAIN");
       } finally {
         inFlight.current = false;
         setBusy(false);
@@ -293,7 +331,7 @@ function VerifyPage() {
         if (scanMode === "scanner") setTimeout(() => inputRef.current?.focus(), 0);
       }
     },
-    [direction, recordOutcome, scanMode, queryClient, t],
+    [autoDirection, manualDirection, overrideReason, recordOutcome, scanMode, queryClient, t],
   );
 
   const verifyRef = useRef(verify);
@@ -457,13 +495,14 @@ function VerifyPage() {
   // Manual lookup never relies on the Entry/Exit toggle: the guard states the
   // direction for the person in front of them.
   const verifyFromLookup = (person: VerificationView, lookupDirection: GateDirection) => {
-    if (!person.activeCredentialId) {
+    if (!person.activeCredentialId && !person.shortId) {
       toast.error(t("verify.lookup_no_credential", { name: person.fullName }));
       return;
     }
     setLookupQuery("");
     setLookupResults([]);
-    void verify(person.activeCredentialId, lookupDirection);
+    const targetCode = person.activeCredentialId || person.shortId || person.id;
+    void verify(targetCode, { direction: lookupDirection });
   };
 
   const onSubmit = (event: React.FormEvent) => {
@@ -540,35 +579,60 @@ function VerifyPage() {
           <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                {t("verify.direction")}
+                Gate Direction Mode
               </p>
-              <div className="flex gap-1 rounded-md bg-secondary p-1">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
-                  onClick={() => setDirection("entry")}
+                  type="button"
+                  onClick={() => {
+                    setAutoDirection(true);
+                    setOverrideReason("");
+                  }}
                   className={cn(
-                    "flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors",
-                    direction === "entry"
-                      ? "bg-success text-success-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <ArrowDownToLine className="h-4 w-4" />
-                  {t("verify.dir_entry")}
-                </button>
-                <button
-                  onClick={() => setDirection("exit")}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition-colors",
-                    direction === "exit"
+                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-all",
+                    autoDirection
                       ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
+                      : "bg-secondary text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <ArrowUpFromLine className="h-4 w-4" />
-                  {t("verify.dir_exit")}
+                  <RefreshCw className="h-4 w-4" />
+                  Auto IN / OUT
                 </button>
+
+                <Button
+                  type="button"
+                  variant={!autoDirection ? "destructive" : "outline"}
+                  size="sm"
+                  onClick={() => setManualOverrideOpen(true)}
+                  className="h-[38px] font-medium"
+                >
+                  <AlertTriangle className="mr-1.5 h-4 w-4" />
+                  {!autoDirection ? `Override: ${manualDirection.toUpperCase()}` : "Manual Override"}
+                </Button>
               </div>
             </div>
+
+            {!autoDirection && (
+              <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+                <span className="font-semibold text-warning">
+                  FORCING {manualDirection.toUpperCase()}:
+                </span>
+                <span className="max-w-[200px] truncate text-muted-foreground" title={overrideReason}>
+                  {overrideReason || "Reason required"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAutoDirection(true);
+                    setOverrideReason("");
+                  }}
+                  className="ml-2 font-bold text-primary underline"
+                >
+                  Reset to Auto
+                </button>
+              </div>
+            )}
 
             {/* Plant 3 has exactly one gate, so it is stated rather than chosen. */}
             <div>
@@ -1015,8 +1079,23 @@ function VerifyPage() {
       {/* ── Visitor walk-in (C7): register → short gate pass → entry ── */}
       {walkInOpen && isAdmin && (
         <WalkInDialog
-          onIssued={(credentialId) => void verify(credentialId, "entry")}
+          onIssued={(credentialId) => void verify(credentialId, { direction: "entry" })}
           onClose={() => setWalkInOpen(false)}
+        />
+      )}
+
+      {/* ── Manual Gate Direction Override ── */}
+      {manualOverrideOpen && (
+        <ManualOverrideDialog
+          initialDirection={manualDirection}
+          initialReason={overrideReason}
+          onApply={(dir, reason) => {
+            setManualDirection(dir);
+            setOverrideReason(reason);
+            setAutoDirection(false);
+            toast.info(`Manual override set: Forcing ${dir.toUpperCase()}`);
+          }}
+          onClose={() => setManualOverrideOpen(false)}
         />
       )}
 
@@ -1192,9 +1271,10 @@ function ResultOverlay({ outcome, onClose }: { outcome: Outcome; onClose: () => 
                     {t(CATEGORY_LABEL[person.category])}
                   </span>
                 </div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t("verify.holder")}
-                </p>
+                {/* Short ID badge */}
+                <div className="inline-flex items-center gap-2 rounded-md bg-secondary px-2.5 py-1 text-sm font-bold tracking-wide text-foreground">
+                  <span>ID NO. {person.shortId || person.workerRef || person.id.slice(0, 8).toUpperCase()}</span>
+                </div>
                 <div className="flex flex-wrap gap-1.5 pt-0.5">
                   <span
                     className={cn(
@@ -1203,6 +1283,9 @@ function ResultOverlay({ outcome, onClose }: { outcome: Outcome; onClose: () => 
                     )}
                   >
                     {t(STATUS_LABEL[person.status])}
+                  </span>
+                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
+                    {outcome.direction === "entry" ? "GATE IN" : "GATE OUT"}
                   </span>
                   {outcome.credential && (
                     <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
@@ -1213,7 +1296,7 @@ function ResultOverlay({ outcome, onClose }: { outcome: Outcome; onClose: () => 
                   )}
                 </div>
                 <div className="space-y-0.5 pt-1 text-xs text-muted-foreground">
-                  {person.workerRef && (
+                  {person.workerRef && person.workerRef !== person.shortId && (
                     <p>
                       {t("verify.worker_ref")}:{" "}
                       <span className="font-medium text-foreground">{person.workerRef}</span>
@@ -1241,6 +1324,14 @@ function ResultOverlay({ outcome, onClose }: { outcome: Outcome; onClose: () => 
                       </span>
                     </p>
                   )}
+                </div>
+                <div className="pt-1.5">
+                  <Link
+                    to="/register"
+                    className="text-xs font-semibold text-primary underline underline-offset-4 hover:text-primary/80"
+                  >
+                    View Record & ID Card →
+                  </Link>
                 </div>
               </>
             ) : (
@@ -1659,6 +1750,94 @@ function IncidentDialog({
             </Button>
             <Button type="submit" disabled={create.isPending}>
               {create.isPending ? t("verify.incident_filing") : t("verify.incident_submit")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ManualOverrideDialog({
+  initialDirection,
+  initialReason,
+  onApply,
+  onClose,
+}: {
+  initialDirection: GateDirection;
+  initialReason: string;
+  onApply: (direction: GateDirection, reason: string) => void;
+  onClose: () => void;
+}) {
+  const [direction, setDirection] = useState<GateDirection>(initialDirection);
+  const [reason, setReason] = useState(initialReason);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) {
+      toast.error("Please enter a mandatory override reason.");
+      return;
+    }
+    onApply(direction, reason.trim());
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-foreground">
+            <AlertTriangle className="h-5 w-5 text-warning shrink-0" />
+            Authorized Manual Gate Override
+          </DialogTitle>
+          <DialogDescription>
+            Force a specific IN or OUT gate direction. Every manual override requires an audited reason and is recorded in the security audit trail.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Forced Direction</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={direction === "entry" ? "default" : "outline"}
+                className={cn(direction === "entry" && "bg-success hover:bg-success/90 text-success-foreground")}
+                onClick={() => setDirection("entry")}
+              >
+                <ArrowDownToLine className="mr-1.5 h-4 w-4" />
+                Force ENTRY (IN)
+              </Button>
+              <Button
+                type="button"
+                variant={direction === "exit" ? "default" : "outline"}
+                className={cn(direction === "exit" && "bg-primary hover:bg-primary/90 text-primary-foreground")}
+                onClick={() => setDirection("exit")}
+              >
+                <ArrowUpFromLine className="mr-1.5 h-4 w-4" />
+                Force EXIT (OUT)
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="override-reason" className="text-sm font-semibold">
+              Mandatory Audit Reason *
+            </Label>
+            <Textarea
+              id="override-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Card unreadable at unmonitored gate, security escort, holder state sync..."
+              rows={3}
+              required
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!reason.trim()}>
+              Apply Manual Override
             </Button>
           </DialogFooter>
         </form>

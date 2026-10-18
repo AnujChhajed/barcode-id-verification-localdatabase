@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { downloadCSV } from "@/lib/csv";
 import jsPDF from "jspdf";
+import { ReportsView } from "./reports";
 
 export const Route = createFileRoute("/_authenticated/logs")({
   component: LogsPage,
@@ -75,6 +76,12 @@ function LogsPage() {
   const [live, setLive] = useState(false);
   const [fromDate, setFromDate] = useState(dayOffset(-30));
   const [toDate, setToDate] = useState(dayOffset(0));
+
+  const [activeTab, setActiveTab] = useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "reports"
+      ? "reports"
+      : "logs",
+  );
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["gate-events", result, direction, fromDate, toDate],
@@ -335,9 +342,10 @@ function LogsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="logs">
-        <TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex flex-wrap h-auto gap-1">
           <TabsTrigger value="logs">{t("logs.tab_logs")}</TabsTrigger>
+          <TabsTrigger value="reports">Reports & Analytics</TabsTrigger>
           <TabsTrigger value="attendance">{t("logs.tab_attend")}</TabsTrigger>
           <TabsTrigger value="denied">
             <TrendingDown className="mr-1.5 h-3.5 w-3.5" />
@@ -560,6 +568,11 @@ function LogsPage() {
               </table>
             )}
           </div>
+        </TabsContent>
+
+        {/* ── Reports & Analytics tab ── */}
+        <TabsContent value="reports" className="space-y-4 pt-2">
+          <ReportsView />
         </TabsContent>
       </Tabs>
     </div>

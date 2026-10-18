@@ -37,15 +37,10 @@ const NAV_ITEMS = [
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, adminOnly: true },
   { to: "/verify", labelKey: "nav.gate_scan", icon: ScanLine, adminOnly: false },
   { to: "/inside", labelKey: "nav.whos_inside", icon: Eye, adminOnly: false },
-  { to: "/logs", labelKey: "nav.logs", icon: ClipboardList, adminOnly: false },
-  { to: "/reports", labelKey: "nav.reports", icon: BarChart3, adminOnly: false },
+  { to: "/logs", labelKey: "nav.logs_reports", icon: ClipboardList, adminOnly: false },
   { to: "/canteen", labelKey: "nav.canteen", icon: UtensilsCrossed, adminOnly: false },
-  { to: "/incidents", labelKey: "nav.incidents", icon: AlertTriangle, adminOnly: false },
-  { to: "/announcements", labelKey: "nav.announcements", icon: Megaphone, adminOnly: false },
-  { to: "/watchlist", labelKey: "nav.watchlist", icon: ShieldAlert, adminOnly: false },
   { to: "/register", labelKey: "nav.register", icon: Users, adminOnly: true },
   { to: "/users", labelKey: "nav.users", icon: UserCog, adminOnly: true },
-  { to: "/audit", labelKey: "nav.audit", icon: ScrollText, adminOnly: true },
   { to: "/settings", labelKey: "nav.settings", icon: Settings, adminOnly: true },
 ] as const;
 

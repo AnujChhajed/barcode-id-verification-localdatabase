@@ -60,6 +60,12 @@ export const updateUserStatusSchema = z
   })
   .strict();
 
+export const resetUserPasswordSchema = z
+  .object({
+    password: newPasswordField,
+  })
+  .strict();
+
 /**
  * The code a holder scans or types on the public card-status page. It is the
  * opaque credential id, so the only real constraint is a sane length — the
@@ -264,15 +270,16 @@ export const GATE_DIRECTIONS = ["entry", "exit"];
 export const GATE_RESULTS = ["approved", "rejected", "unable_to_verify"];
 
 /**
- * A scan. `code` is the opaque barcode/QR payload, which is the credential id —
- * it never encodes personal data. The direction is stated by the operator or
- * the kiosk; it is never inferred here, because guessing it would invent a
- * business rule that has not been agreed.
+ * A scan. `code` can be the credential ID or person short ID (W101, I101, etc.).
+ * `direction` can be specified ('entry' | 'exit') or set to 'auto' (determined
+ * automatically from the person's current gate state).
+ * If a manual override is performed, `overrideReason` records the justification.
  */
 export const verifyGateSchema = z
   .object({
     code: z.string().trim().min(1, "Scan or enter a credential code.").max(128),
-    direction: z.enum(GATE_DIRECTIONS),
+    direction: z.enum(["entry", "exit", "auto"]).optional(),
+    overrideReason: z.string().trim().max(500).optional(),
   })
   .strict();
 

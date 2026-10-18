@@ -30,6 +30,7 @@ export interface SessionUser {
 /** The full profile. Administrator only — it carries personal data. */
 export interface PersonView {
   id: string;
+  shortId?: string | null;
   category: PersonCategory;
   fullName: string;
   phone: string | null;
@@ -49,6 +50,7 @@ export interface PersonView {
 /** The gate-staff view: identification only, no contact details. */
 export interface VerificationView {
   id: string;
+  shortId?: string | null;
   category: PersonCategory;
   fullName: string;
   status: PersonStatus;
@@ -104,6 +106,8 @@ export interface GateVerification {
   reasonCode: string;
   reasonText: string;
   direction: GateDirection;
+  previousState?: "inside" | "outside";
+  gateState?: "inside" | "outside";
   occurredAt: string;
   /** True when the scan matched one already recorded inside the duplicate window. */
   duplicate: boolean;
@@ -409,10 +413,10 @@ export interface GateEventFilters {
 }
 
 export const gateApi = {
-  verify(code: string, direction: GateDirection) {
+  verify(code: string, direction?: GateDirection | "auto", overrideReason?: string) {
     return apiFetch<GateVerification>("/api/gate/verify", {
       method: "POST",
-      body: { code, direction },
+      body: { code, direction: direction ?? "auto", overrideReason },
     });
   },
   events(filters: GateEventFilters = {}) {
@@ -781,6 +785,15 @@ export const usersApi = {
       body: { isActive },
     });
     return user;
+  },
+  async resetPassword(id: string, password: string) {
+    return apiFetch<{ success: boolean; message: string }>(
+      `/api/users/${encodeURIComponent(id)}/password`,
+      {
+        method: "POST",
+        body: { password },
+      },
+    );
   },
 };
 

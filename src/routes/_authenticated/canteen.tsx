@@ -37,6 +37,7 @@ function CanteenPage() {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const inFlight = useRef(false);
+  const lastScanRef = useRef<{ code: string; time: number } | null>(null);
   const [code, setCode] = useState("");
   const [answer, setAnswer] = useState<CanteenVerification | null>(null);
 
@@ -52,17 +53,26 @@ function CanteenPage() {
       setAnswer(result);
       setCode("");
       void refetch();
+
+      const displayId =
+        result.person?.shortId ||
+        result.person?.workerRef ||
+        result.credential?.id ||
+        result.person?.fullName ||
+        "CARD";
+
       if (result.result === "approved") {
-        toast.success(t("ctn.approved_toast", { name: result.person?.fullName ?? "" }));
+        toast.success(`CANTEEN ENTRY RECORDED — ${displayId}`);
       } else if (result.alreadyEntered) {
-        toast.warning(result.reasonText);
+        toast.warning(`ALREADY USED TODAY — ${displayId}`);
       } else {
-        toast.error(result.reasonText);
+        const reason = (result.reasonText || result.reasonCode || "").toUpperCase();
+        toast.error(`ACCESS DENIED — ${reason}`);
       }
       setTimeout(() => inputRef.current?.focus(), 0);
     },
     onError: (error) => {
-      toast.error(error instanceof ApiError ? error.message : t("common.error"));
+      toast.error("UNABLE TO VERIFY — TRY AGAIN");
     },
   });
 
@@ -71,6 +81,17 @@ function CanteenPage() {
       event.preventDefault();
       const scanned = code.trim();
       if (!scanned || inFlight.current) return;
+
+      const now = Date.now();
+      if (
+        lastScanRef.current &&
+        lastScanRef.current.code === scanned &&
+        now - lastScanRef.current.time < 1200
+      ) {
+        return;
+      }
+      lastScanRef.current = { code: scanned, time: now };
+
       inFlight.current = true;
       verify.mutate(scanned, { onSettled: () => (inFlight.current = false) });
     },
